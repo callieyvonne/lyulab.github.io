@@ -1,3 +1,6 @@
 title: Lyu Lab Tools
 description: Metagenomic and Microbiome Analysis
 theme: jekyll-theme-slate
+
+include: 
+  - assets
