@@ -1,6 +1,4 @@
 title: Lyu Lab 
-description: Metagenomic and Microbiome Analysis
-theme: jekyll-theme-slate
+description: Metagenomic and Microbiome Analysis 
+theme: jekyll-theme-primer
 
-include: 
-  - assets
