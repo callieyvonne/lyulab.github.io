@@ -1,19 +1,65 @@
-<!DOCTYPE html>
-<html lang="en">
 <head>
 <meta charset="UTF-8">
 <title>Metagenomic Coverage Calculator</title>
+
 <style>
   body {
     font-family: Arial, sans-serif;
     margin: 40px;
-    max-width: 800px;
+    max-width: 900px;
   }
+
   h1 { margin-bottom: 5px; }
   h2 { margin-top: 40px; }
   label { display: block; margin-top: 10px; }
   input { width: 120px; padding: 5px; margin-left: 10px; }
-  button { margin-top: 15px; padding: 8px 14px; }
+  button { margin-top: 15px; padding: 8px 14px; cursor: pointer; }
+
+  /* Toggle buttons */
+  .toggle-container {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+  .toggle-btn {
+    padding: 8px 16px;
+    border: 2px solid #888;
+    background: #f0f0f0;
+    cursor: pointer;
+    font-weight: bold;
+    border-radius: 6px;
+  }
+  .toggle-btn.active {
+    background: #4a90e2;
+    color: white;
+    border-color: #2c6bb2;
+  }
+
+  /* Controls block inside cheat sheet */
+  .table-controls {
+    margin-top: 10px;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 30px;
+  }
+
+  /* Compact slider */
+  .slider-container {
+    width: 260px;
+  }
+  .slider-labels {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    opacity: 0.85;
+    margin-top: 4px;
+  }
+  input[type="range"] {
+    width: 100%;
+  }
+
+  /* Tables */
   table {
     border-collapse: collapse;
     margin-top: 20px;
@@ -25,14 +71,76 @@
     text-align: center;
   }
   th { background: #eee; }
+
+  /* Color palette */
+  .color-taxonomy { background-color: #e3d7ff; }
+  .color-functional { background-color: #d0ecff; }
+  .color-highres { background-color: #bfe8ff; }
+  .color-mag { background-color: #ffe2cc; }
+  .color-low { background-color: #ffffff; }
+
+  /* Scroll container */
+  .scroll-table {
+    overflow-x: auto;
+    margin-top: 15px;
+  }
+
+  /* Legend */
+  .legend-box {
+    margin-top: 10px;
+    padding: 12px;
+    border: 1px solid #aaa;
+    background: #fafafa;
+    font-size: 14px;
+  }
+  .legend-title {
+    font-weight: bold;
+    margin-bottom: 10px;   /* Added spacing */
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    margin-top: 8px;       /* Added breathing room */
+  }
+  .legend-color {
+    width: 18px;
+    height: 18px;
+    margin-right: 8px;
+    border: 1px solid #666;
+  }
+
+  /* Recommended depth tables */
+  .depth-cheatsheet {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 30px;
+  }
+  .depth-cheatsheet th, .depth-cheatsheet td {
+    border: 1px solid #ccc;
+    padding: 10px;
+    text-align: left;
+  }
+  .depth-cheatsheet th {
+    background-color: #eee;
+    font-weight: bold;
+  }
+  .depth-cheatsheet caption {
+    margin-bottom: 10px;
+    font-size: 20px;
+    font-weight: bold;
+  }
+
+  /* Hide rumen table initially */
 </style>
 </head>
 
 <body>
 
 <h1>Metagenomic Coverage Calculator</h1>
-<p>Estimate genome coverage from sequencing depth and relative abundance, or compute required depth for a target coverage.</p>
 
+<!-- ============================
+     COVERAGE FROM DEPTH
+     ============================ -->
 <h2>Coverage From Sequencing Depth</h2>
 
 <label>
@@ -54,7 +162,9 @@
 
 <p id="coverageResult" style="font-weight:bold;"></p>
 
-
+<!-- ============================
+     REQUIRED DEPTH CALCULATOR
+     ============================ -->
 <h2>Required Sequencing Depth for Target Coverage</h2>
 
 <label>
@@ -76,81 +186,194 @@
 
 <p id="depthResult" style="font-weight:bold;"></p>
 
-
+<!-- ============================
+     CHEAT SHEET SECTION (header only)
+     ============================ -->
 <h2>Cheat Sheet: Coverage Across Depths and Relative Abundances</h2>
-<p>Automatically updates when genome size changes.</p>
+<p>Automatically updates with ecosystem mode, DNA quality, and genome size.</p>
 
+<!-- ============================
+     CHEAT SHEET CONTROLS (L2 placement)
+     ============================ -->
+<div class="table-controls">
+
+  <!-- Ecosystem toggle -->
+  <div class="toggle-container">
+    <button id="btnHuman" class="toggle-btn active" onclick="setEcosystem('human')">Human Gut</button>
+    <button id="btnRumen" class="toggle-btn" onclick="setEcosystem('rumen')">Rumen</button>
+  </div>
+
+  <!-- DNA quality slider (flipped, with ng thresholds + tooltips) -->
+  <div class="slider-container">
+    <label><strong>DNA Quality:</strong></label>
+
+    <!-- Slider is reversed visually: 0 = Very Low, 3 = High -->
+    <input type="range" id="dnaSlider" min="0" max="3" step="1" value="3" oninput="updateAll()">
+
+    <div class="slider-labels">
+      <span title="<1 ng — unstable, high PCR cycles">Very Low<br>&lt;1 ng</span>
+      <span title="1–9.9 ng — high PCR cycles, e.g., 1.3 ng">Low<br>1–9.9 ng</span>
+      <span title="10–99 ng — moderate PCR cycles">Moderate<br>10–99 ng</span>
+      <span title="≥100 ng — low PCR cycles, stable profiles">High<br>≥100 ng</span>
+    </div>
+  </div>
+
+</div>
+
+<!-- Genome size input -->
 <label>
   Genome size (Mb):
-  <input id="genomeCheat" type="number" value="4" step="0.1" oninput="updateCheatSheet()">
+  <input id="genomeCheat" type="number" value="4" step="0.1" oninput="updateAll()">
 </label>
 
-<table id="cheatTable">
-  <thead>
-    <tr>
-      <th>Depth (Gb)</th>
-      <th>RA 10%</th>
-      <th>RA 1%</th>
-      <th>RA 0.1%</th>
-      <th>RA 0.01%</th>
-    </tr>
-  </thead>
-  <tbody></tbody>
+<!-- ============================
+     EXTENDED DYNAMIC TABLE
+     ============================ -->
+<div class="scroll-table">
+  <table id="cheatTable">
+    <thead>
+      <tr>
+        <th>Depth (Gb)</th>
+        <th>RA 100%</th>
+        <th>RA 90%</th>
+        <th>RA 80%</th>
+        <th>RA 70%</th>
+        <th>RA 60%</th>
+        <th>RA 50%</th>
+        <th>RA 40%</th>
+        <th>RA 30%</th>
+        <th>RA 20%</th>
+        <th>RA 10%</th>
+        <th>RA 1%</th>
+        <th>RA 0.1%</th>
+        <th>RA 0.01%</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+</div>
+
+<!-- ============================
+     UPDATED LEGEND (with spacing + “Ideal for…”)
+     ============================ -->
+<div id="legendBox" class="legend-box">
+  <div class="legend-title">Coverage Tiers</div>
+
+  <div class="legend-item">
+    <div class="legend-color" style="background:#e3d7ff;"></div>
+    Ideal for Taxonomic Profiling
+  </div>
+
+  <div class="legend-item">
+    <div class="legend-color" style="background:#d0ecff;"></div>
+    Ideal for Functional Profiling
+  </div>
+
+  <div class="legend-item">
+    <div class="legend-color" style="background:#bfe8ff;"></div>
+    Ideal for High‑Resolution Functional Profiling
+  </div>
+
+  <div class="legend-item">
+    <div class="legend-color" style="background:#ffe2cc;"></div>
+    Ideal for MAG Creation
+  </div>
+
+  <div class="legend-item">
+    <div class="legend-color" style="background:#ffffff;"></div>
+    Below Recommended Threshold
+  </div>
+</div>
+
+<!-- ============================
+     RECOMMENDED DEPTH TABLES
+     ============================ -->
+
+<!-- HUMAN GUT TABLE -->
+<table id="humanDepthTable" class="depth-cheatsheet">
+  <caption><strong>Recommended Depths — Human Gut</strong></caption>
+  <tr>
+    <th>Depth (Gbp)</th>
+    <th>Use Case</th>
+    <th>Coverage (2 Mbp genome)</th>
+    <th>Coverage (3.5 Mbp genome)</th>
+    <th>Analytical Capabilities</th>
+  </tr>
+
+  <tr class="color-taxonomy">
+    <td>0.5–2 Gbp</td>
+    <td><strong>Taxonomic Profiling</strong></td>
+    <td>~250×</td>
+    <td>~140×</td>
+    <td>Stable species-level profiles; rare taxa may be missed.</td>
+  </tr>
+
+  <tr class="color-functional">
+    <td>5 Gbp</td>
+    <td><strong>Functional Profiling</strong></td>
+    <td>~2,500×</td>
+    <td>~1,400×</td>
+    <td>High pathway completeness; moderate rare gene recovery.</td>
+  </tr>
+
+  <tr class="color-highres">
+    <td>10 Gbp</td>
+    <td><strong>High-Resolution Functional</strong></td>
+    <td>≥10,000×</td>
+    <td>≥5,700×</td>
+    <td>Improved rare gene and protein detection.</td>
+  </tr>
+
+  <tr class="color-mag">
+    <td>20–50+ Gbp</td>
+    <td><strong>MAG Creation</strong></td>
+    <td>≥20,000×</td>
+    <td>≥11,400×</td>
+    <td>Medium- to high-quality MAGs; deeper sequencing improves completeness.</td>
+  </tr>
 </table>
 
 
-<script>
-// Coverage calculator
-function computeCoverage() {
-  const A = parseFloat(document.getElementById('abundance').value) / 100.0;
-  const G = parseFloat(document.getElementById('genome').value);
-  const D = parseFloat(document.getElementById('depth').value);
 
-  const coverage = (D * 1000 * A) / G;
-  document.getElementById('coverageResult').innerText =
-    `Estimated coverage: ${coverage.toFixed(2)}×`;
-}
 
-// Required depth calculator
-function computeRequiredDepth() {
-  const C = parseFloat(document.getElementById('targetCoverage').value);
-  const A = parseFloat(document.getElementById('abundance2').value) / 100.0;
-  const G = parseFloat(document.getElementById('genome2').value);
+<!-- RUMEN TABLE -->
+<table id="rumenDepthTable" class="depth-cheatsheet">
+  <caption><strong>Recommended Depths — Rumen</strong></caption>
+  <tr>
+    <th>Depth (Gbp)</th>
+    <th>Use Case</th>
+    <th>Coverage (3.5 Mbp genome)</th>
+    <th>Analytical Capabilities</th>
+  </tr>
 
-  const depthGb = (C * G) / (1000 * A);
-  document.getElementById('depthResult').innerText =
-    `Required sequencing depth: ${depthGb.toFixed(2)} Gb`;
-}
+  <tr class="color-taxonomy">
+    <td>5–10 Gbp</td>
+    <td><strong>Taxonomic Profiling</strong></td>
+    <td>~140×</td>
+    <td>Stable genus-level profiles; species-level less stable.</td>
+  </tr>
 
-// Cheat sheet generator
-function updateCheatSheet() {
-  const G = parseFloat(document.getElementById('genomeCheat').value);
-  const depths = [1, 5, 10, 20];
-  const abundances = [0.10, 0.01, 0.001, 0.0001];
+  <tr class="color-functional">
+    <td>10–20 Gbp</td>
+    <td><strong>Functional Profiling</strong></td>
+    <td>~1,400×</td>
+    <td>Improved pathway completeness; moderate rare gene recovery.</td>
+  </tr>
 
-  const tbody = document.querySelector('#cheatTable tbody');
-  tbody.innerHTML = "";
+  <tr class="color-highres">
+    <td>20–40 Gbp</td>
+    <td><strong>High-Resolution Functional</strong></td>
+    <td>~5,700×</td>
+    <td>High pathway completeness; better rare gene detection.</td>
+  </tr>
 
-  depths.forEach(D => {
-    const row = document.createElement('tr');
-    const depthCell = document.createElement('td');
-    depthCell.textContent = D;
-    row.appendChild(depthCell);
-
-    abundances.forEach(A => {
-      const cov = (D * 1000 * A) / G;
-      const cell = document.createElement('td');
-      cell.textContent = cov.toFixed(2) + "×";
-      row.appendChild(cell);
-    });
-
-    tbody.appendChild(row);
-  });
-}
-
-// Initialize cheat sheet on load
-updateCheatSheet();
-</script>
+  <tr class="color-mag">
+    <td>40–80+ Gbp</td>
+    <td><strong>MAG Creation</strong></td>
+    <td>≥11,000×</td>
+    <td>Required for medium- to high-quality MAGs in high-diversity rumen samples.</td>
+  </tr>
+</table>
 
 <div style="margin-top:40px; padding:20px; border:2px solid #888; background:#f0f8ff;">
   <h2>Minimum Relative Abundance Required</h2>
@@ -178,20 +401,6 @@ updateCheatSheet();
   <button onclick="computeRequiredRA()">Compute Minimum RA</button>
 
   <p id="raResult" style="font-weight:bold;"></p>
-
-  <script>
-    function computeRequiredRA() {
-      const C = parseFloat(document.getElementById('targetCoverageRA').value);
-      const G = parseFloat(document.getElementById('genomeRA').value);
-      const D = parseFloat(document.getElementById('depthRA').value);
-
-      const A = (C * G) / (1000 * D);   // fraction
-      const A_percent = A * 100;
-
-      document.getElementById('raResult').innerText =
-        `Minimum relative abundance required: ${A_percent.toFixed(4)}%`;
-    }
-  </script>
 
   <h3>Scientific Basis</h3>
   <p>
@@ -387,5 +596,205 @@ Required depth (Gb) = (Coverage × G) / (1000 × A)
 </div>
 
 
-</body>
-</html>
+<script>
+/* ============================================================
+   GLOBAL SETTINGS
+   ============================================================ */
+let settings = {
+  ecosystem: "human",
+  dnaQuality: 3   // slider default = High DNA quality
+};
+
+/* ============================================================
+   ECOSYSTEM THRESHOLDS
+   ============================================================ */
+const thresholds = {
+  human: { taxonomy: 250, functional: 2500, highres: 10000, mag: 20000 },
+  rumen: { taxonomy: 140, functional: 1400, highres: 5700, mag: 11000 }
+};
+
+/* ============================================================
+   DEPTH TIERS
+   ============================================================ */
+const depthTiers = {
+  human: [0.5, 1, 2, 5, 10, 20, 50],
+  rumen: [5, 10, 20, 40, 80]
+};
+
+/* ============================================================
+   DNA QUALITY MULTIPLIERS (scientifically correct)
+   slider: 0 = Very Low → 3 = High
+   ============================================================ */
+const dnaMultipliers = [
+  3.0,  // Very Low (<1 ng)
+  4.0,  // Low (1–9.9 ng)
+  6.0,  // Moderate (10–99 ng)
+ 9.0   // High (≥100 ng)
+];
+
+/* ============================================================
+   ECOSYSTEM TOGGLE
+   ============================================================ */
+function setEcosystem(mode) {
+  settings.ecosystem = mode;
+
+  document.getElementById("btnHuman").classList.toggle("active", mode === "human");
+  document.getElementById("btnRumen").classList.toggle("active", mode === "rumen");
+
+  document.getElementById("humanDepthTable").style.display = mode === "human" ? "table" : "none";
+  document.getElementById("rumenDepthTable").style.display = mode === "rumen" ? "table" : "none";
+
+  updateAll();
+}
+
+/* ============================================================
+   COLOR CODING
+   ============================================================ */
+function getColorClass(cov) {
+  const G = parseFloat(document.getElementById('genomeCheat').value) || 2;
+
+  // Choose threshold set based on genome size: 2 Mbp vs 3.5 Mbp
+  let t;
+  if (G <= 2.25) {
+    // 2 Mbp thresholds
+    t = { taxonomy: 250, functional: 2500, highres: 10000, mag: 20000 };
+  } else {
+    // 3.5 Mbp thresholds
+    t = { taxonomy: 140, functional: 1400, highres: 5700, mag: 11400 };
+  }
+
+  if (cov >= t.mag) return "color-mag";
+  if (cov >= t.highres) return "color-highres";
+  if (cov >= t.functional) return "color-functional";
+  if (cov >= t.taxonomy) return "color-taxonomy";
+  return "color-low";
+}
+
+
+
+/* ============================================================
+   LEGEND UPDATE
+   ============================================================ */
+function updateLegend() {
+  document.getElementById("legendBox").innerHTML = `
+    <div class="legend-title">Coverage Tiers</div>
+
+    <div class="legend-item">
+      <div class="legend-color" style="background:#e3d7ff;"></div>
+      Ideal for Taxonomic Profiling
+    </div>
+
+    <div class="legend-item">
+      <div class="legend-color" style="background:#d0ecff;"></div>
+      Ideal for Functional Profiling
+    </div>
+
+    <div class="legend-item">
+      <div class="legend-color" style="background:#bfe8ff;"></div>
+      Ideal for High‑Resolution Functional Profiling
+    </div>
+
+    <div class="legend-item">
+      <div class="legend-color" style="background:#ffe2cc;"></div>
+      Ideal for MAG Creation
+    </div>
+
+    <div class="legend-item">
+      <div class="legend-color" style="background:#ffffff;"></div>
+      Below Recommended Threshold
+    </div>
+  `;
+}
+
+/* ============================================================
+   EXTENDED DYNAMIC TABLE
+   ============================================================ */
+function updateCheatSheet() {
+  const G = parseFloat(document.getElementById('genomeCheat').value) || 1;
+  const multiplier = dnaMultipliers[parseInt(document.getElementById('dnaSlider').value, 10)];
+  settings.dnaQuality = parseInt(document.getElementById('dnaSlider').value, 10);
+
+  const depths = depthTiers[settings.ecosystem];
+  const abundances = [1,0.9,0.8,0.7,0.6,0.5,0.4,0.3,0.2,0.1,0.01,0.001,0.0001];
+
+  const tbody = document.querySelector('#cheatTable tbody');
+  tbody.innerHTML = "";
+
+  depths.forEach(D => {
+    const row = document.createElement('tr');
+
+    const depthCell = document.createElement('td');
+    depthCell.textContent = D;
+    row.appendChild(depthCell);
+
+    abundances.forEach(A => {
+      const cov = (D * multiplier * 1000 * A) / G;
+      const cell = document.createElement('td');
+      cell.textContent = cov.toFixed(2) + "×";
+      cell.className = getColorClass(cov);
+      row.appendChild(cell);
+    });
+
+    tbody.appendChild(row);
+  });
+}
+
+/* ============================================================
+   COVERAGE CALCULATOR
+   ============================================================ */
+function computeCoverage() {
+  const A = parseFloat(document.getElementById('abundance').value) / 100.0;
+  const G = parseFloat(document.getElementById('genome').value) || 1;
+  const D = parseFloat(document.getElementById('depth').value) || 0;
+  const multiplier = dnaMultipliers[parseInt(document.getElementById('dnaSlider').value, 10)];
+
+  const coverage = (D * multiplier * 1000 * A) / G;
+
+  document.getElementById('coverageResult').innerText =
+    `Estimated coverage (with DNA-quality adjustment): ${coverage.toFixed(2)}×`;
+}
+
+/* ============================================================
+   REQUIRED DEPTH CALCULATOR
+   ============================================================ */
+function computeRequiredDepth() {
+  const C = parseFloat(document.getElementById('targetCoverage').value) || 0;
+  const A = parseFloat(document.getElementById('abundance2').value) / 100.0;
+  const G = parseFloat(document.getElementById('genome2').value) || 1;
+  const multiplier = dnaMultipliers[parseInt(document.getElementById('dnaSlider').value, 10)];
+
+  const depthGb = (C * G) / (1000 * A * multiplier);
+
+  document.getElementById('depthResult').innerText =
+    `Required sequencing depth (adjusted for DNA quality): ${depthGb.toFixed(2)} Gb`;
+}
+
+/* ============================================================
+   MINIMUM RELATIVE ABUNDANCE CALCULATOR
+   ============================================================ */
+function computeRequiredRA() {
+  const C = parseFloat(document.getElementById('targetCoverageRA').value) || 0;
+  const G = parseFloat(document.getElementById('genomeRA').value) || 1;
+  const D = parseFloat(document.getElementById('depthRA').value) || 0;
+  const multiplier = dnaMultipliers[parseInt(document.getElementById('dnaSlider').value, 10)];
+
+  const A = (C * G) / (1000 * D * multiplier);
+  const A_percent = A * 100;
+
+  document.getElementById('raResult').innerText =
+    `Minimum relative abundance required (adjusted for DNA quality): ${A_percent.toFixed(4)}%`;
+}
+
+/* ============================================================
+   UPDATE EVERYTHING
+   ============================================================ */
+function updateAll() {
+  updateLegend();
+  updateCheatSheet();
+}
+
+/* ============================================================
+   INITIALIZE ON LOAD
+   ============================================================ */
+updateAll();
+</script>
